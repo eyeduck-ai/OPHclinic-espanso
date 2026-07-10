@@ -1,0 +1,11 @@
+name: ophthalmology-clinic
+title: Ophthalmology Clinic
+description: Espanso snippets for ophthalmology clinic templates and ICD-10-CM code-only expansions.
+version: 0.1.0
+author: ZMH
+tags:
+  - medical
+  - ophthalmology
+  - icd10
+  - clinic
+homepage: https://github.com/eyeduck-ai/OPHclinic-espanso

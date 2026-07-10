@@ -1,0 +1,90 @@
+# OPHclinic Espanso
+
+Espanso v2 snippets for ophthalmology outpatient notes and ICD-10-CM code entry.
+ICD triggers expand to codes only; diagnosis labels are not inserted into clinical text.
+
+## Files
+
+- `_manifest.yml`: package identity and release version.
+- `package.yml`: package entrypoint.
+- `match/ophthalmology.yml`: shared clinic templates and ICD-10-CM matches.
+- `config/notepad.yml`: optional, computer-local Notepad compatibility setting.
+- `UPDATE_OPHCLINIC.cmd`: interactive manual updater for portable Espanso.
+- `.ophclinic/Update-OPHclinic.ps1`: release downloader, verifier, installer, and rollback logic.
+
+## Triggers
+
+Template triggers start with `;`, for example `;init`, `;oct`, and `;ded`.
+ICD-10-CM triggers start with `;.` and expand to code only:
+
+- `;.ded` -> `H04.129`
+- `;.cata` -> `H25.9`
+- `;.poag` -> `H40.10X0`
+- `;.pdr` -> `E11.3599`
+
+The date variable expands as `YYYYMMDD`.
+
+## Portable Installation
+
+Extract the release bootstrap ZIP into the portable Espanso directory, beside
+`espanso.cmd`. Run:
+
+```powershell
+.\UPDATE_OPHCLINIC.cmd
+```
+
+The updater discovers the portable directory from its own location, so the drive
+letter does not matter. It downloads the latest non-draft GitHub release, verifies
+the SHA-256 checksum and release manifest, backs up the current match, replaces it,
+and restarts Espanso. No scheduled task is created.
+
+The default update refuses to overwrite a match changed after the last managed
+installation. To intentionally restore the GitHub release:
+
+```powershell
+powershell -NoProfile -File .\.ophclinic\Update-OPHclinic.ps1 -Force
+```
+
+Runtime state, logs, and the five newest backups are stored under `.ophclinic` in
+the portable directory. `config/notepad.yml` remains local and is never included
+in the managed release archive.
+
+Updater exit codes:
+
+- `0`: installed successfully or already current.
+- `1`: download, validation, installation, or restart failure.
+- `2`: local match drift detected; use `-Force` only after reviewing it.
+- `3`: another updater process is already running.
+
+## Publishing
+
+The manifest uses semantic versioning. A tag such as `v0.1.0` must match the
+`version` in `_manifest.yml`. Pushing the tag runs repository validation, Windows
+updater tests, builds the managed and bootstrap ZIP files, and creates the GitHub
+release.
+
+Local validation with the cached CMS file:
+
+```powershell
+python .\scripts\validate_config.py --cms-file "C:\path\to\icd10cm_codes_2026.txt"
+python .\scripts\build_release.py --tag v0.1.0 --output dist
+powershell -NoProfile -File .\tests\Test-Update-OPHclinic.ps1
+```
+
+## Injection Compatibility
+
+The multiline `;init` and `;ded` templates use `force_mode: clipboard`. ICD matches
+do not force an injection mode. `config/notepad.yml` adds a 10 ms key delay to avoid
+incomplete trigger deletion in Notepad; it is deliberately outside release updates.
+
+## ICD Source And Safety
+
+The current codes are validated against the CMS April 1, 2026 ICD-10-CM code file,
+applicable through September 30, 2026. Clinical staff remain responsible for
+confirming that each code and template is appropriate for the encounter.
+
+- CMS: https://www.cms.gov/medicare/coding-billing/icd-10-codes
+- CDC: https://www.cdc.gov/nchs/icd/icd-10-cm/files.html
+
+Do not commit patient information, credentials, tokens, or private clinic data to
+this public repository.

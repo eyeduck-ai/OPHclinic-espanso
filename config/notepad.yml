@@ -1,0 +1,2 @@
+filter_exec: '(?i)notepad\.exe$'
+key_delay: 10
