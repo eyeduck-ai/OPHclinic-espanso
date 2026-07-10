@@ -155,6 +155,31 @@ function Replace-FileAtomically {
     }
 }
 
+function Invoke-EspansoCli {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("restart", "status")]
+        [string]$Verb,
+        [int]$TimeoutSeconds = 30
+    )
+    $arguments = '/d /s /c ""{0}" {1}"' -f $script:EspansoCommand, $Verb
+    $process = Start-Process `
+        -FilePath $env:ComSpec `
+        -ArgumentList $arguments `
+        -WindowStyle Hidden `
+        -PassThru
+    try {
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Espanso $Verb timed out after $TimeoutSeconds seconds"
+        }
+        $process.Refresh()
+        return $process.ExitCode
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Invoke-EspansoRestart {
     if ($SkipRestart) {
         Write-UpdateLog "Espanso restart skipped by test option."
@@ -164,14 +189,14 @@ function Invoke-EspansoRestart {
         throw "Portable espanso.cmd not found: $script:EspansoCommand"
     }
 
-    & $script:EspansoCommand restart | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "Espanso restart returned exit code $LASTEXITCODE"
+    $restartExit = Invoke-EspansoCli -Verb "restart"
+    if ($restartExit -ne 0) {
+        throw "Espanso restart returned exit code $restartExit"
     }
     Start-Sleep -Seconds 2
-    & $script:EspansoCommand status | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        throw "Espanso status returned exit code $LASTEXITCODE after restart"
+    $statusExit = Invoke-EspansoCli -Verb "status"
+    if ($statusExit -ne 0) {
+        throw "Espanso status returned exit code $statusExit after restart"
     }
 }
 
@@ -190,7 +215,10 @@ function Restore-PreviousMatch {
         }
 
         if (-not $SkipRestart -and (Test-Path -LiteralPath $script:EspansoCommand -PathType Leaf)) {
-            & $script:EspansoCommand restart | Out-Null
+            $rollbackRestartExit = Invoke-EspansoCli -Verb "restart"
+            if ($rollbackRestartExit -ne 0) {
+                Write-UpdateLog "Espanso restart failed after rollback with exit code $rollbackRestartExit" "ERROR"
+            }
         }
     } catch {
         Write-UpdateLog "Rollback failed: $($_.Exception.Message)" "ERROR"

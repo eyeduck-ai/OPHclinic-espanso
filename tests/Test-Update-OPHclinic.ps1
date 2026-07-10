@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $updater = Join-Path $repoRoot ".ophclinic\Update-OPHclinic.ps1"
 $sourceMatch = Join-Path $repoRoot "match\ophthalmology.yml"
-$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ophclinic-updater-tests-" + [Guid]::NewGuid().ToString("N"))
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ophclinic updater tests " + [Guid]::NewGuid().ToString("N"))
 $testsPassed = 0
 
 function Assert-True {
