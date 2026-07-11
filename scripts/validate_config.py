@@ -26,18 +26,18 @@ SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 ICD_PATTERN = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,7})?$")
 
 ORIGINAL_ICD_MATCHES = {
-    ";.ded": "H04.129",
-    ";.asth": "H53.149",
-    ";.cata": "H25.9",
-    ";.iol": "Z96.1",
-    ";.sch": "H11.30",
-    ";.punctate": "H16.149",
-    ";.conj": "H10.9",
-    ";.blephconj": "H10.509",
-    ";.vo": "H43.399",
-    ";.poag": "H40.10X0",
-    ";.dm": "E11.8",
-    ";.pdr": "E11.3599",
+    ";.ded;": "H04.129",
+    ";.asth;": "H53.149",
+    ";.cata;": "H25.9",
+    ";.iol;": "Z96.1",
+    ";.sch;": "H11.30",
+    ";.punctate;": "H16.149",
+    ";.conj;": "H10.9",
+    ";.blephconj;": "H10.509",
+    ";.vo;": "H43.399",
+    ";.poag;": "H40.10X0",
+    ";.dm;": "E11.8",
+    ";.pdr;": "E11.3599",
 }
 
 
@@ -129,7 +129,7 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     manifest = load_yaml("_manifest.yml")
     package = load_yaml("package.yml")
     match_config = load_yaml("match/ophthalmology.yml")
-    notepad_config = load_yaml("config/notepad.yml")
+    default_config = load_yaml("config/default.yml")
 
     require(isinstance(manifest, dict), "_manifest.yml must contain an object")
     require(manifest.get("name") == "ophthalmology-clinic", "Unexpected package name")
@@ -139,6 +139,14 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         manifest.get("homepage") == "https://github.com/eyeduck-ai/OPHclinic-espanso",
         "Manifest homepage must point to the GitHub repository",
     )
+    updater_text = (ROOT / ".ophclinic" / "Update-OPHclinic.ps1").read_text(encoding="utf-8")
+    updater_version = re.search(
+        r'^\$script:UpdaterVersion\s*=\s*\[Version\]"([^"]+)"$',
+        updater_text,
+        re.MULTILINE,
+    )
+    require(updater_version is not None, "Updater version declaration is missing")
+    require(updater_version.group(1) == version, "Updater version does not match manifest version")
     require(package == {"imports": ["match/ophthalmology.yml"]}, "Unexpected package.yml imports")
 
     require(isinstance(match_config, dict), "match/ophthalmology.yml must contain an object")
@@ -151,6 +159,13 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     matches = match_config.get("matches")
     require(isinstance(matches, list), "matches must be a list")
     trigger_map = collect_trigger_map(matches)
+    prefix_pairs = sorted(
+        (shorter, longer)
+        for shorter in trigger_map
+        for longer in trigger_map
+        if shorter != longer and longer.startswith(shorter)
+    )
+    require(not prefix_pairs, f"Trigger prefix conflicts remain: {prefix_pairs[:10]}")
 
     force_modes = {
         trigger: item.get("force_mode")
@@ -163,7 +178,10 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     )
     require(
         trigger_map[";ded"].get("replace", "").splitlines()
-        == ["- try ONSD/AT + fox TID OU", "- suggest warm compression BID OU"],
+        == [
+            "- try ONSD/AT + fox TID OU + ery/vidisc/dura HS OU",
+            "- suggest warm compression BID OU",
+        ],
         ";ded multiline replacement changed unexpectedly",
     )
     init_lines = trigger_map[";init"].get("replace", "").splitlines()
@@ -179,6 +197,7 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         f"Expected {EXPECTED_ICD_COUNT} ICD triggers, found {len(icd_items)}",
     )
     for trigger, item in icd_items.items():
+        require(trigger.endswith(";"), f"ICD trigger must end with a semicolon: {trigger}")
         replacement = item.get("replace")
         require(isinstance(replacement, str), f"{trigger} replacement is not text")
         require(ICD_PATTERN.fullmatch(replacement) is not None, f"{trigger} is not code-only: {replacement!r}")
@@ -197,9 +216,15 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     require(not missing_codes, f"ICD codes absent from CMS FY2026: {missing_codes[:10]}")
 
     require(
-        notepad_config == {"filter_exec": "(?i)notepad\\.exe$", "key_delay": 10},
-        "config/notepad.yml changed unexpectedly",
+        default_config
+        == {
+            "key_delay": 10,
+            "search_shortcut": "CTRL+ALT+SPACE",
+            "search_trigger": ";help",
+        },
+        "config/default.yml is not the approved global configuration",
     )
+    require(not (ROOT / "config" / "notepad.yml").exists(), "Legacy config/notepad.yml must be removed")
 
     sensitive_patterns = {
         "GitHub token": re.compile(r"\b(?:gho|ghp|github_pat)_[A-Za-z0-9_]+"),

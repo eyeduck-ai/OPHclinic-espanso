@@ -56,17 +56,23 @@ def main() -> int:
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
-    match_path = ROOT / "match" / "ophthalmology.yml"
-    match_bytes = match_path.read_bytes()
-    match_hash = hashlib.sha256(match_bytes).hexdigest()
+    managed_files = {
+        "config/default.yml": (ROOT / "config" / "default.yml").read_bytes(),
+        "match/ophthalmology.yml": (ROOT / "match" / "ophthalmology.yml").read_bytes(),
+    }
     release_manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "package": "ophthalmology-clinic",
         "repository": REPOSITORY,
         "version": version,
         "tag": args.tag,
-        "match_path": "match/ophthalmology.yml",
-        "match_sha256": match_hash,
+        "files": {
+            name: {
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size": len(content),
+            }
+            for name, content in sorted(managed_files.items())
+        },
     }
     release_manifest_bytes = (
         json.dumps(release_manifest, indent=2, sort_keys=True) + "\n"
@@ -75,7 +81,8 @@ def main() -> int:
     managed_name = f"OPHclinic-espanso-{args.tag}.zip"
     managed_path = output / managed_name
     with zipfile.ZipFile(managed_path, "w") as archive:
-        add_bytes(archive, "match/ophthalmology.yml", match_bytes)
+        for name, content in sorted(managed_files.items()):
+            add_bytes(archive, name, content)
         add_bytes(archive, "release-manifest.json", release_manifest_bytes)
     managed_checksum = write_checksum(managed_path)
 
@@ -86,17 +93,36 @@ def main() -> int:
         "\r\n"
         "1. Extract this ZIP into the portable Espanso directory beside espanso.cmd.\r\n"
         "2. Run UPDATE_OPHCLINIC.cmd.\r\n"
-        "3. The updater installs only .espanso\\match\\ophthalmology.yml.\r\n"
-        "4. Machine-local files under .espanso\\config are not changed.\r\n"
+        "3. v0.1.x clients must extract this v0.2.0 bootstrap once before updating.\r\n"
+        "4. The updater manages both the clinic match and global default configuration.\r\n"
     ).encode("ascii")
+    bootstrap_files = {
+        ".ophclinic/Update-OPHclinic.ps1": (
+            ROOT / ".ophclinic" / "Update-OPHclinic.ps1"
+        ).read_bytes(),
+        "OPHCLINIC-BOOTSTRAP.txt": bootstrap_readme,
+        "UPDATE_OPHCLINIC.cmd": (ROOT / "UPDATE_OPHCLINIC.cmd").read_bytes(),
+    }
+    bootstrap_manifest = {
+        "schema_version": 1,
+        "repository": REPOSITORY,
+        "version": version,
+        "tag": args.tag,
+        "files": {
+            name: {
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size": len(content),
+            }
+            for name, content in sorted(bootstrap_files.items())
+        },
+    }
+    bootstrap_manifest_bytes = (
+        json.dumps(bootstrap_manifest, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
     with zipfile.ZipFile(bootstrap_path, "w") as archive:
-        add_bytes(archive, "UPDATE_OPHCLINIC.cmd", (ROOT / "UPDATE_OPHCLINIC.cmd").read_bytes())
-        add_bytes(
-            archive,
-            ".ophclinic/Update-OPHclinic.ps1",
-            (ROOT / ".ophclinic" / "Update-OPHclinic.ps1").read_bytes(),
-        )
-        add_bytes(archive, "OPHCLINIC-BOOTSTRAP.txt", bootstrap_readme)
+        for name, content in sorted(bootstrap_files.items()):
+            add_bytes(archive, name, content)
+        add_bytes(archive, "bootstrap-manifest.json", bootstrap_manifest_bytes)
     bootstrap_checksum = write_checksum(bootstrap_path)
 
     for path in (managed_path, managed_checksum, bootstrap_path, bootstrap_checksum):

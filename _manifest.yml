@@ -1,7 +1,7 @@
 name: ophthalmology-clinic
 title: Ophthalmology Clinic
 description: Espanso snippets for ophthalmology clinic templates and ICD-10-CM code-only expansions.
-version: 0.1.1
+version: 0.2.0
 author: ZMH
 tags:
   - medical

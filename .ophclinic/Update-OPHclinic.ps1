@@ -10,13 +10,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$script:UpdaterVersion = [Version]"0.2.0"
 $script:StateDirectory = $null
 $script:LogPath = $null
-$script:DestinationMatch = $null
 $script:EspansoCommand = $null
 $script:StageDirectory = $null
-$script:BackupPath = $null
-$script:OriginalExisted = $false
+$script:TransactionBackupDirectory = $null
+$script:DeploymentRecords = @()
 $script:DeploymentStarted = $false
 $script:LockStream = $null
 
@@ -70,7 +70,7 @@ function Copy-ReleaseAsset {
 
     Invoke-WebRequest `
         -Uri $uri.AbsoluteUri `
-        -Headers @{ "User-Agent" = "OPHclinic-espanso-updater/1.0"; "Accept" = "application/octet-stream" } `
+        -Headers @{ "User-Agent" = "OPHclinic-espanso-updater/2.0"; "Accept" = "application/octet-stream" } `
         -UseBasicParsing `
         -TimeoutSec 60 `
         -OutFile $Destination
@@ -87,7 +87,7 @@ function Get-LatestRelease {
     return Invoke-RestMethod `
         -Uri $ReleaseApiUrl `
         -Headers @{
-            "User-Agent" = "OPHclinic-espanso-updater/1.0"
+            "User-Agent" = "OPHclinic-espanso-updater/2.0"
             "Accept" = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
         } `
@@ -113,7 +113,7 @@ function Write-StateAtomically {
     )
     $temporaryPath = "$Path.new.$([Guid]::NewGuid().ToString('N'))"
     $replaceBackup = "$Path.replace-backup.$([Guid]::NewGuid().ToString('N'))"
-    $State | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+    $State | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
     try {
         if (Test-Path -LiteralPath $Path -PathType Leaf) {
             [System.IO.File]::Replace($temporaryPath, $Path, $replaceBackup, $true)
@@ -136,6 +136,7 @@ function Replace-FileAtomically {
         [Parameter(Mandatory = $true)][string]$Destination
     )
     $destinationDirectory = Split-Path -Parent $Destination
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
     $temporaryPath = Join-Path $destinationDirectory ("{0}.new.{1}" -f (Split-Path -Leaf $Destination), [Guid]::NewGuid().ToString("N"))
     $replaceBackup = Join-Path $destinationDirectory ("{0}.replace-backup.{1}" -f (Split-Path -Leaf $Destination), [Guid]::NewGuid().ToString("N"))
     Copy-Item -LiteralPath $Source -Destination $temporaryPath -Force
@@ -200,19 +201,59 @@ function Invoke-EspansoRestart {
     }
 }
 
-function Restore-PreviousMatch {
+function Add-DeploymentRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$BackupName
+    )
+    $originalExisted = Test-Path -LiteralPath $Destination -PathType Leaf
+    $backupPath = $null
+    if ($originalExisted) {
+        $backupPath = Join-Path $script:TransactionBackupDirectory $BackupName
+        New-Item -ItemType Directory -Path (Split-Path -Parent $backupPath) -Force | Out-Null
+        Copy-Item -LiteralPath $Destination -Destination $backupPath
+    }
+    $script:DeploymentRecords += [pscustomobject]@{
+        Destination = $Destination
+        OriginalExisted = $originalExisted
+        BackupPath = $backupPath
+    }
+}
+
+function Install-FileTransactional {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$BackupName
+    )
+    Add-DeploymentRecord -Destination $Destination -BackupName $BackupName
+    Replace-FileAtomically -Source $Source -Destination $Destination
+}
+
+function Remove-FileTransactional {
+    param(
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$BackupName
+    )
+    Add-DeploymentRecord -Destination $Destination -BackupName $BackupName
+    Remove-Item -LiteralPath $Destination -Force
+}
+
+function Restore-Deployment {
     if (-not $script:DeploymentStarted) {
         return
     }
 
     try {
-        if ($script:OriginalExisted -and $script:BackupPath -and (Test-Path -LiteralPath $script:BackupPath -PathType Leaf)) {
-            Replace-FileAtomically -Source $script:BackupPath -Destination $script:DestinationMatch
-            Write-UpdateLog "Restored the previous match from $script:BackupPath" "WARN"
-        } elseif (-not $script:OriginalExisted -and (Test-Path -LiteralPath $script:DestinationMatch -PathType Leaf)) {
-            Remove-Item -LiteralPath $script:DestinationMatch -Force
-            Write-UpdateLog "Removed the newly installed match during rollback." "WARN"
+        for ($index = $script:DeploymentRecords.Count - 1; $index -ge 0; $index--) {
+            $record = $script:DeploymentRecords[$index]
+            if ($record.OriginalExisted -and $record.BackupPath -and (Test-Path -LiteralPath $record.BackupPath -PathType Leaf)) {
+                Replace-FileAtomically -Source $record.BackupPath -Destination $record.Destination
+            } elseif (-not $record.OriginalExisted -and (Test-Path -LiteralPath $record.Destination -PathType Leaf)) {
+                Remove-Item -LiteralPath $record.Destination -Force
+            }
         }
+        Write-UpdateLog "Restored all files from the failed update transaction." "WARN"
 
         if (-not $SkipRestart -and (Test-Path -LiteralPath $script:EspansoCommand -PathType Leaf)) {
             $rollbackRestartExit = Invoke-EspansoCli -Verb "restart"
@@ -243,13 +284,120 @@ function Rotate-Backups {
         throw "Backup directory is outside updater state: $BackupDirectory"
     }
     $expired = @(
-        Get-ChildItem -LiteralPath $BackupDirectory -Filter "ophthalmology-*.yml" -File |
+        Get-ChildItem -LiteralPath $BackupDirectory -Directory |
             Sort-Object LastWriteTimeUtc -Descending |
             Select-Object -Skip 5
     )
-    foreach ($file in $expired) {
-        Remove-Item -LiteralPath $file.FullName -Force
+    foreach ($directory in $expired) {
+        if (-not (Test-PathInside -Child $directory.FullName -Parent $BackupDirectory)) {
+            throw "Refusing to remove unexpected backup path: $($directory.FullName)"
+        }
+        Remove-Item -LiteralPath $directory.FullName -Recurse -Force
     }
+}
+
+function Save-VerifiedReleaseZip {
+    param(
+        [Parameter(Mandatory = $true)]$Release,
+        [Parameter(Mandatory = $true)][string]$ZipName,
+        [Parameter(Mandatory = $true)][string]$DestinationDirectory
+    )
+    $checksumName = "$ZipName.sha256"
+    $zipPath = Join-Path $DestinationDirectory $ZipName
+    $checksumPath = Join-Path $DestinationDirectory $checksumName
+    Copy-ReleaseAsset -Source (Get-AssetUrl -Release $Release -Name $ZipName) -Destination $zipPath
+    Copy-ReleaseAsset -Source (Get-AssetUrl -Release $Release -Name $checksumName) -Destination $checksumPath
+
+    $checksumLine = (Get-Content -LiteralPath $checksumPath -Raw -Encoding ASCII).Trim()
+    if ($checksumLine -notmatch '^(?<hash>[0-9a-fA-F]{64})\s+\*?(?<name>\S+)$') {
+        throw "Invalid checksum file format for $ZipName"
+    }
+    if ($Matches.name -ne $ZipName) {
+        throw "Checksum file references unexpected asset: $($Matches.name)"
+    }
+    if ((Get-FileSha256 -Path $zipPath) -ne $Matches.hash.ToLowerInvariant()) {
+        throw "Release ZIP SHA-256 mismatch: $ZipName"
+    }
+    return $zipPath
+}
+
+function Get-RelativeFiles {
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory
+    )
+    return @(
+        Get-ChildItem -LiteralPath $Directory -Recurse -File |
+            ForEach-Object {
+                $_.FullName.Substring($Directory.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
+            } |
+            Sort-Object
+    )
+}
+
+function Assert-ExactFiles {
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)][string[]]$Expected
+    )
+    $actual = @(Get-RelativeFiles -Directory $Directory)
+    $sortedExpected = @($Expected | Sort-Object)
+    if (($actual -join "|") -ne ($sortedExpected -join "|")) {
+        throw "Archive contains unexpected files: $($actual -join ', ')"
+    }
+}
+
+function Get-ManifestFileRecord {
+    param(
+        [Parameter(Mandatory = $true)]$Manifest,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+    if (-not ($Manifest.PSObject.Properties.Name -contains "files")) {
+        throw "Manifest does not contain a files object"
+    }
+    $property = @($Manifest.files.PSObject.Properties | Where-Object { $_.Name -eq $RelativePath })
+    if ($property.Count -ne 1) {
+        throw "Manifest must contain exactly one record for $RelativePath"
+    }
+    return $property[0].Value
+}
+
+function Assert-ManifestFile {
+    param(
+        [Parameter(Mandatory = $true)]$Manifest,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$FilePath
+    )
+    $record = Get-ManifestFileRecord -Manifest $Manifest -RelativePath $RelativePath
+    $info = Get-Item -LiteralPath $FilePath
+    if ([int64]$record.size -ne $info.Length) {
+        throw "Manifest size mismatch for $RelativePath"
+    }
+    $hash = Get-FileSha256 -Path $FilePath
+    if ($hash -ne ([string]$record.sha256).ToLowerInvariant()) {
+        throw "Manifest SHA-256 mismatch for $RelativePath"
+    }
+    return $hash
+}
+
+function Get-StateFileHash {
+    param(
+        [Parameter(Mandatory = $true)]$State,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+    if ([int]$State.schema_version -eq 1) {
+        if ($RelativePath -eq "match/ophthalmology.yml") {
+            return ([string]$State.match_sha256).ToLowerInvariant()
+        }
+        return $null
+    }
+    $record = Get-ManifestFileRecord -Manifest $State -RelativePath $RelativePath
+    return ([string]$record.sha256).ToLowerInvariant()
+}
+
+function Test-KnownLegacyNotepad {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $text = [System.IO.File]::ReadAllText($Path).Replace("`r`n", "`n").TrimEnd([char[]]@("`r", "`n"))
+    return $text -eq "filter_exec: '(?i)notepad\.exe$'`nkey_delay: 10"
 }
 
 function Invoke-Update {
@@ -260,17 +408,21 @@ function Invoke-Update {
 
     $script:StateDirectory = Join-Path $root ".ophclinic"
     $script:LogPath = Join-Path $script:StateDirectory "update.log"
-    $script:DestinationMatch = Join-Path $root ".espanso\match\ophthalmology.yml"
     $script:EspansoCommand = Join-Path $root "espanso.cmd"
     $statePath = Join-Path $script:StateDirectory "state.json"
     $lockPath = Join-Path $script:StateDirectory "update.lock"
     $backupDirectory = Join-Path $script:StateDirectory "backups"
     $stagingRoot = Join-Path $script:StateDirectory "staging"
+    $destinations = [ordered]@{
+        "config/default.yml" = Join-Path $root ".espanso\config\default.yml"
+        "match/ophthalmology.yml" = Join-Path $root ".espanso\match\ophthalmology.yml"
+    }
 
     New-Item -ItemType Directory -Path $script:StateDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
     New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
-    New-Item -ItemType Directory -Path (Split-Path -Parent $script:DestinationMatch) -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destinations["config/default.yml"]) -Force | Out-Null
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destinations["match/ophthalmology.yml"]) -Force | Out-Null
 
     try {
         $script:LockStream = [System.IO.File]::Open(
@@ -300,118 +452,166 @@ function Invoke-Update {
     $state = $null
     if (Test-Path -LiteralPath $statePath -PathType Leaf) {
         $state = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ([int]$state.schema_version -ne 1) {
+        if ([int]$state.schema_version -notin @(1, 2)) {
             throw "Unsupported updater state schema"
         }
     }
 
-    $currentHash = $null
-    if (Test-Path -LiteralPath $script:DestinationMatch -PathType Leaf) {
-        $currentHash = Get-FileSha256 -Path $script:DestinationMatch
-    }
-
+    $drift = @()
     if ($state) {
         $stateVersion = [Version]([string]$state.version)
-        $managedHash = ([string]$state.match_sha256).ToLowerInvariant()
-        $hasDrift = -not $currentHash -or $currentHash -ne $managedHash
+        foreach ($relativePath in $destinations.Keys) {
+            $managedHash = Get-StateFileHash -State $state -RelativePath $relativePath
+            if ($managedHash) {
+                $destination = $destinations[$relativePath]
+                if (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or
+                    (Get-FileSha256 -Path $destination) -ne $managedHash) {
+                    $drift += $relativePath
+                }
+            }
+        }
 
-        if ($hasDrift -and -not $Force) {
-            Write-UpdateLog "Local match drift detected. Review it, then rerun with -Force to overwrite." "WARN"
+        if ($drift.Count -gt 0 -and -not $Force) {
+            Write-UpdateLog "Local managed-file drift detected: $($drift -join ', '). Review it, then rerun with -Force to overwrite." "WARN"
             return 2
         }
         if ($releaseVersion -lt $stateVersion) {
             throw "Latest release $releaseVersion is older than installed version $stateVersion"
         }
-        if ($releaseVersion -eq $stateVersion -and -not $hasDrift -and -not $Force) {
+        if ($releaseVersion -eq $stateVersion -and [int]$state.schema_version -eq 2 -and $drift.Count -eq 0 -and -not $Force) {
             Write-UpdateLog "Already current at $tag."
             return 0
         }
     }
 
-    $zipName = "OPHclinic-espanso-$tag.zip"
-    $checksumName = "$zipName.sha256"
-    $zipUrl = Get-AssetUrl -Release $release -Name $zipName
-    $checksumUrl = Get-AssetUrl -Release $release -Name $checksumName
-
     $script:StageDirectory = Join-Path $stagingRoot ([Guid]::NewGuid().ToString("N"))
-    $extractDirectory = Join-Path $script:StageDirectory "extract"
-    New-Item -ItemType Directory -Path $extractDirectory -Force | Out-Null
-    $zipPath = Join-Path $script:StageDirectory $zipName
-    $checksumPath = Join-Path $script:StageDirectory $checksumName
+    $managedExtract = Join-Path $script:StageDirectory "managed"
+    $bootstrapExtract = Join-Path $script:StageDirectory "bootstrap"
+    New-Item -ItemType Directory -Path $managedExtract -Force | Out-Null
+    New-Item -ItemType Directory -Path $bootstrapExtract -Force | Out-Null
 
-    Copy-ReleaseAsset -Source $zipUrl -Destination $zipPath
-    Copy-ReleaseAsset -Source $checksumUrl -Destination $checksumPath
+    $managedName = "OPHclinic-espanso-$tag.zip"
+    $bootstrapName = "OPHclinic-espanso-bootstrap-$tag.zip"
+    $managedZip = Save-VerifiedReleaseZip -Release $release -ZipName $managedName -DestinationDirectory $script:StageDirectory
+    $bootstrapZip = Save-VerifiedReleaseZip -Release $release -ZipName $bootstrapName -DestinationDirectory $script:StageDirectory
+    Expand-Archive -LiteralPath $managedZip -DestinationPath $managedExtract -Force
+    Expand-Archive -LiteralPath $bootstrapZip -DestinationPath $bootstrapExtract -Force
 
-    $checksumLine = (Get-Content -LiteralPath $checksumPath -Raw -Encoding ASCII).Trim()
-    if ($checksumLine -notmatch '^(?<hash>[0-9a-fA-F]{64})\s+\*?(?<name>\S+)$') {
-        throw "Invalid checksum file format"
-    }
-    if ($Matches.name -ne $zipName) {
-        throw "Checksum file references unexpected asset: $($Matches.name)"
-    }
-    $expectedZipHash = $Matches.hash.ToLowerInvariant()
-    $actualZipHash = Get-FileSha256 -Path $zipPath
-    if ($actualZipHash -ne $expectedZipHash) {
-        throw "Release ZIP SHA-256 mismatch"
-    }
+    $managedPaths = @("config/default.yml", "match/ophthalmology.yml")
+    $bootstrapPaths = @(".ophclinic/Update-OPHclinic.ps1", "OPHCLINIC-BOOTSTRAP.txt", "UPDATE_OPHCLINIC.cmd")
+    Assert-ExactFiles -Directory $managedExtract -Expected @($managedPaths + "release-manifest.json")
+    Assert-ExactFiles -Directory $bootstrapExtract -Expected @($bootstrapPaths + "bootstrap-manifest.json")
 
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $extractDirectory -Force
-    $relativeFiles = @(
-        Get-ChildItem -LiteralPath $extractDirectory -Recurse -File |
-            ForEach-Object {
-                $_.FullName.Substring($extractDirectory.Length).TrimStart([char[]]@('\', '/')).Replace('\', '/')
-            } |
-            Sort-Object
-    )
-    $expectedFiles = @("match/ophthalmology.yml", "release-manifest.json") | Sort-Object
-    if (($relativeFiles -join "|") -ne ($expectedFiles -join "|")) {
-        throw "Release ZIP contains unexpected files: $($relativeFiles -join ', ')"
-    }
-
-    $releaseManifestPath = Join-Path $extractDirectory "release-manifest.json"
-    $releasedMatch = Join-Path $extractDirectory "match\ophthalmology.yml"
-    $releaseManifest = Get-Content -LiteralPath $releaseManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if ([int]$releaseManifest.schema_version -ne 1 -or
+    $releaseManifest = Get-Content -LiteralPath (Join-Path $managedExtract "release-manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([int]$releaseManifest.schema_version -ne 2 -or
+        [string]$releaseManifest.package -ne "ophthalmology-clinic" -or
         [string]$releaseManifest.repository -ne "eyeduck-ai/OPHclinic-espanso" -or
         [string]$releaseManifest.version -ne $versionText -or
         [string]$releaseManifest.tag -ne $tag -or
-        [string]$releaseManifest.match_path -ne "match/ophthalmology.yml") {
+        @($releaseManifest.files.PSObject.Properties).Count -ne $managedPaths.Count) {
         throw "Release manifest metadata is invalid"
     }
 
-    $releasedMatchHash = Get-FileSha256 -Path $releasedMatch
-    if ($releasedMatchHash -ne ([string]$releaseManifest.match_sha256).ToLowerInvariant()) {
-        throw "Released match SHA-256 does not match release manifest"
+    $bootstrapManifest = Get-Content -LiteralPath (Join-Path $bootstrapExtract "bootstrap-manifest.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([int]$bootstrapManifest.schema_version -ne 1 -or
+        [string]$bootstrapManifest.repository -ne "eyeduck-ai/OPHclinic-espanso" -or
+        [string]$bootstrapManifest.version -ne $versionText -or
+        [string]$bootstrapManifest.tag -ne $tag -or
+        @($bootstrapManifest.files.PSObject.Properties).Count -ne $bootstrapPaths.Count) {
+        throw "Bootstrap manifest metadata is invalid"
     }
-    $releasedMatchInfo = Get-Item -LiteralPath $releasedMatch
-    if ($releasedMatchInfo.Length -lt 100 -or $releasedMatchInfo.Length -gt 2MB) {
-        throw "Released match has an unexpected size"
+
+    $managedHashes = [ordered]@{}
+    foreach ($relativePath in $managedPaths) {
+        $filePath = Join-Path $managedExtract ($relativePath.Replace('/', '\'))
+        $managedHashes[$relativePath] = Assert-ManifestFile -Manifest $releaseManifest -RelativePath $relativePath -FilePath $filePath
     }
+    $bootstrapHashes = [ordered]@{}
+    foreach ($relativePath in $bootstrapPaths) {
+        $filePath = Join-Path $bootstrapExtract ($relativePath.Replace('/', '\'))
+        $bootstrapHashes[$relativePath] = Assert-ManifestFile -Manifest $bootstrapManifest -RelativePath $relativePath -FilePath $filePath
+    }
+
+    $releasedMatch = Join-Path $managedExtract "match\ophthalmology.yml"
+    $releasedDefault = Join-Path $managedExtract "config\default.yml"
     $releasedText = Get-Content -LiteralPath $releasedMatch -Raw -Encoding UTF8
     if ($releasedText -notmatch '(?m)^matches:\s*$' -or
-        $releasedText -notmatch 'trigger:\s*";\.ded"' -or
+        $releasedText -notmatch 'trigger:\s*";\.ded;"' -or
         $releasedText -notmatch 'replace:\s*"H04\.129"') {
         throw "Released match failed basic content checks"
     }
-
-    $script:OriginalExisted = Test-Path -LiteralPath $script:DestinationMatch -PathType Leaf
-    if ($script:OriginalExisted) {
-        $timestamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")
-        $previousVersion = if ($state) { [string]$state.version } else { "unmanaged" }
-        $script:BackupPath = Join-Path $backupDirectory "ophthalmology-$previousVersion-$timestamp.yml"
-        Copy-Item -LiteralPath $script:DestinationMatch -Destination $script:BackupPath
-        Write-UpdateLog "Backed up the current match to $script:BackupPath"
+    $defaultText = [System.IO.File]::ReadAllText($releasedDefault).Replace("`r`n", "`n")
+    $expectedDefault = "key_delay: 10`nsearch_shortcut: CTRL+ALT+SPACE`nsearch_trigger: `";help`"`n"
+    if ($defaultText -ne $expectedDefault) {
+        throw "Released default configuration is not the approved global configuration"
     }
 
+    $timestamp = [DateTime]::UtcNow.ToString("yyyyMMdd-HHmmss")
+    $script:TransactionBackupDirectory = Join-Path $backupDirectory ("{0}-{1}-{2}" -f $timestamp, $tag, [Guid]::NewGuid().ToString("N").Substring(0, 8))
+    New-Item -ItemType Directory -Path $script:TransactionBackupDirectory -Force | Out-Null
     $script:DeploymentStarted = $true
-    Replace-FileAtomically -Source $releasedMatch -Destination $script:DestinationMatch
+
+    Install-FileTransactional `
+        -Source $releasedMatch `
+        -Destination $destinations["match/ophthalmology.yml"] `
+        -BackupName "managed\match\ophthalmology.yml"
+    Install-FileTransactional `
+        -Source $releasedDefault `
+        -Destination $destinations["config/default.yml"] `
+        -BackupName "managed\config\default.yml"
+
+    $legacyNotepad = Join-Path $root ".espanso\config\notepad.yml"
+    if (Test-Path -LiteralPath $legacyNotepad -PathType Leaf) {
+        if (Test-KnownLegacyNotepad -Path $legacyNotepad) {
+            Remove-FileTransactional -Destination $legacyNotepad -BackupName "legacy\config\notepad.yml"
+            Write-UpdateLog "Removed the known legacy Notepad-only configuration after backing it up."
+        } else {
+            Write-UpdateLog "Preserved modified legacy Notepad configuration: $legacyNotepad" "WARN"
+        }
+    }
+
     Invoke-EspansoRestart
 
+    $bootstrapDestinations = [ordered]@{
+        ".ophclinic/Update-OPHclinic.ps1" = Join-Path $root ".ophclinic\Update-OPHclinic.ps1"
+        "OPHCLINIC-BOOTSTRAP.txt" = Join-Path $root "OPHCLINIC-BOOTSTRAP.txt"
+        "UPDATE_OPHCLINIC.cmd" = Join-Path $root "UPDATE_OPHCLINIC.cmd"
+    }
+    foreach ($relativePath in $bootstrapPaths) {
+        $source = Join-Path $bootstrapExtract ($relativePath.Replace('/', '\'))
+        $destination = $bootstrapDestinations[$relativePath]
+        if (-not (Test-Path -LiteralPath $destination -PathType Leaf) -or
+            (Get-FileSha256 -Path $destination) -ne $bootstrapHashes[$relativePath]) {
+            Install-FileTransactional `
+                -Source $source `
+                -Destination $destination `
+                -BackupName ("bootstrap\" + $relativePath.Replace('/', '\'))
+        }
+    }
+
+    $stateFiles = [ordered]@{}
+    foreach ($relativePath in $managedPaths) {
+        $source = Join-Path $managedExtract ($relativePath.Replace('/', '\'))
+        $stateFiles[$relativePath] = [ordered]@{
+            sha256 = $managedHashes[$relativePath]
+            size = (Get-Item -LiteralPath $source).Length
+        }
+    }
+    $stateBootstrap = [ordered]@{}
+    foreach ($relativePath in $bootstrapPaths) {
+        $source = Join-Path $bootstrapExtract ($relativePath.Replace('/', '\'))
+        $stateBootstrap[$relativePath] = [ordered]@{
+            sha256 = $bootstrapHashes[$relativePath]
+            size = (Get-Item -LiteralPath $source).Length
+        }
+    }
     $newState = [ordered]@{
-        schema_version = 1
+        schema_version = 2
         version = $versionText
         tag = $tag
-        match_sha256 = $releasedMatchHash
+        files = $stateFiles
+        updater_version = $versionText
+        bootstrap_files = $stateBootstrap
         installed_at_utc = [DateTime]::UtcNow.ToString("o")
         release_url = if ($release.PSObject.Properties.Name -contains "html_url") { [string]$release.html_url } else { "" }
     }
@@ -432,7 +632,7 @@ try {
     $exitCode = Invoke-Update
 } catch {
     Write-UpdateLog $_.Exception.Message "ERROR"
-    Restore-PreviousMatch
+    Restore-Deployment
     $exitCode = 1
 } finally {
     Remove-SafeStageDirectory
