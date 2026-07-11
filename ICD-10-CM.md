@@ -25,10 +25,10 @@ Applicable through September 30, 2026.
 | `;.bleph;` | `H01.009` | Unspecified blepharitis unspecified eye, unspecified eyelid |
 | `;.blephconj;` | `H10.509` | Unspecified blepharoconjunctivitis, unspecified eye |
 | `;.blur;` | `H53.8` | Other visual disturbances |
-| `;.brvodme;` | `H34.8390` | Tributary (branch) retinal vein occlusion, unspecified eye, with macular edema |
-| `;.brvodmeod;` | `H34.8310` | Tributary (branch) retinal vein occlusion, right eye, with macular edema |
-| `;.brvodmeos;` | `H34.8320` | Tributary (branch) retinal vein occlusion, left eye, with macular edema |
-| `;.brvodmeou;` | `H34.8330` | Tributary (branch) retinal vein occlusion, bilateral, with macular edema |
+| `;.brvo;` | `H34.8390` | Tributary (branch) retinal vein occlusion, unspecified eye, with macular edema |
+| `;.brvood;` | `H34.8310` | Tributary (branch) retinal vein occlusion, right eye, with macular edema |
+| `;.brvoos;` | `H34.8320` | Tributary (branch) retinal vein occlusion, left eye, with macular edema |
+| `;.brvoou;` | `H34.8330` | Tributary (branch) retinal vein occlusion, bilateral, with macular edema |
 | `;.brvostable;` | `H34.8392` | Tributary (branch) retinal vein occlusion, unspecified eye, stable |
 | `;.cata;` | `H25.9` | Unspecified age-related cataract |
 | `;.chal;` | `H00.19` | Chalazion unspecified eye, unspecified eyelid |
@@ -38,10 +38,10 @@ Applicable through September 30, 2026.
 | `;.cortcatod;` | `H25.011` | Cortical age-related cataract, right eye |
 | `;.cortcatos;` | `H25.012` | Cortical age-related cataract, left eye |
 | `;.cortcatou;` | `H25.013` | Cortical age-related cataract, bilateral |
-| `;.crvodme;` | `H34.8190` | Central retinal vein occlusion, unspecified eye, with macular edema |
-| `;.crvodmeod;` | `H34.8110` | Central retinal vein occlusion, right eye, with macular edema |
-| `;.crvodmeos;` | `H34.8120` | Central retinal vein occlusion, left eye, with macular edema |
-| `;.crvodmeou;` | `H34.8130` | Central retinal vein occlusion, bilateral, with macular edema |
+| `;.crvo;` | `H34.8190` | Central retinal vein occlusion, unspecified eye, with macular edema |
+| `;.crvood;` | `H34.8110` | Central retinal vein occlusion, right eye, with macular edema |
+| `;.crvoos;` | `H34.8120` | Central retinal vein occlusion, left eye, with macular edema |
+| `;.crvoou;` | `H34.8130` | Central retinal vein occlusion, bilateral, with macular edema |
 | `;.crvostable;` | `H34.8192` | Central retinal vein occlusion, unspecified eye, stable |
 | `;.csr;` | `H35.719` | Central serous chorioretinopathy, unspecified eye |
 | `;.csrod;` | `H35.711` | Central serous chorioretinopathy, right eye |

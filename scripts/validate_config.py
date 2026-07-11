@@ -63,6 +63,27 @@ EXPECTED_IVI_TEMPLATES = {
     ";iviou": ", IVI-$|$ OU {{today}}",
 }
 
+EXPECTED_RVO_ICD_MATCHES = {
+    ";.crvo;": "H34.8190",
+    ";.crvood;": "H34.8110",
+    ";.crvoos;": "H34.8120",
+    ";.crvoou;": "H34.8130",
+    ";.brvo;": "H34.8390",
+    ";.brvood;": "H34.8310",
+    ";.brvoos;": "H34.8320",
+    ";.brvoou;": "H34.8330",
+}
+RETIRED_RVO_TRIGGERS = {
+    ";.crvodme;",
+    ";.crvodmeod;",
+    ";.crvodmeos;",
+    ";.crvodmeou;",
+    ";.brvodme;",
+    ";.brvodmeod;",
+    ";.brvodmeos;",
+    ";.brvodmeou;",
+}
+
 ORIGINAL_ICD_MATCHES = {
     ";.ded;": "H04.129",
     ";.asth;": "H53.149",
@@ -297,6 +318,11 @@ def validate_repository(cms_file: Path | None, write_icd_reference: bool) -> dic
     for trigger, expected_code in ORIGINAL_ICD_MATCHES.items():
         require(trigger in icd_items, f"Original ICD trigger is missing: {trigger}")
         require(icd_items[trigger].get("replace") == expected_code, f"Original ICD mapping changed: {trigger}")
+    for trigger, expected_code in EXPECTED_RVO_ICD_MATCHES.items():
+        require(trigger in icd_items, f"RVO ICD trigger is missing: {trigger}")
+        require(icd_items[trigger].get("replace") == expected_code, f"RVO ICD mapping changed: {trigger}")
+    for trigger in RETIRED_RVO_TRIGGERS:
+        require(trigger not in trigger_map, f"Retired RVO ICD trigger remains: {trigger}")
 
     cms_descriptions = load_cms_descriptions(cms_file)
     missing_codes = sorted(
