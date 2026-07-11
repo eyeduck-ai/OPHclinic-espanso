@@ -27,9 +27,9 @@ python .\scripts\validate_config.py
 
 ```powershell
 python .\scripts\validate_config.py
-python .\scripts\build_release.py --tag v1.0.1 --output dist
+python .\scripts\build_release.py --tag v1.0.2 --output dist
 ```
 
-3. 提交並推送 `main`，再建立同版本 tag，例如 `v1.0.1`。
+3. 提交並推送 `main`，再建立同版本 tag，例如 `v1.0.2`。
 
-GitHub Actions 會驗證設定、建立 `OPHclinic-espanso-v1.0.1.zip` 與 `.sha256`，並發佈 GitHub Release。
+GitHub Actions 會驗證設定、建立 `OPHclinic-espanso-v1.0.2.zip` 與 `.sha256`，並發佈 GitHub Release。

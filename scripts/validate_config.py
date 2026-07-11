@@ -21,8 +21,8 @@ CMS_URL = (
     "april-1-2026-code-descriptions-tabular-order.zip"
 )
 CMS_ZIP_SHA256 = "4fd9d8b37f02ab42827c7e7be30595c005b0cc3a6bae7a515e3f4c86b6918688"
-EXPECTED_ICD_COUNT = 201
-EXPECTED_MATCH_COUNT = 235
+EXPECTED_ICD_COUNT = 219
+EXPECTED_MATCH_COUNT = 253
 ICD_REFERENCE_PATH = ROOT / "ICD-10-CM.md"
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 ICD_PATTERN = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,7})?$")
@@ -72,6 +72,26 @@ EXPECTED_RVO_ICD_MATCHES = {
     ";.brvood;": "H34.8310",
     ";.brvoos;": "H34.8320",
     ";.brvoou;": "H34.8330",
+}
+EXPECTED_EYELID_ICD_MATCHES = {
+    ";.entroru;": "H02.001",
+    ";.entrorl;": "H02.002",
+    ";.entrolu;": "H02.004",
+    ";.entroll;": "H02.005",
+    ";.entroou;": "H02.009",
+    ";.ectroru;": "H02.101",
+    ";.ectrorl;": "H02.102",
+    ";.ectrolu;": "H02.104",
+    ";.ectroll;": "H02.105",
+    ";.ectroou;": "H02.109",
+    ";.trichiru;": "H02.051",
+    ";.trichirl;": "H02.052",
+    ";.trichilu;": "H02.054",
+    ";.trichill;": "H02.055",
+    ";.trichiou;": "H02.059",
+    ";.ptosisod;": "H02.401",
+    ";.ptosisos;": "H02.402",
+    ";.ptosisou;": "H02.403",
 }
 RETIRED_RVO_TRIGGERS = {
     ";.crvodme;",
@@ -321,6 +341,12 @@ def validate_repository(cms_file: Path | None, write_icd_reference: bool) -> dic
     for trigger, expected_code in EXPECTED_RVO_ICD_MATCHES.items():
         require(trigger in icd_items, f"RVO ICD trigger is missing: {trigger}")
         require(icd_items[trigger].get("replace") == expected_code, f"RVO ICD mapping changed: {trigger}")
+    for trigger, expected_code in EXPECTED_EYELID_ICD_MATCHES.items():
+        require(trigger in icd_items, f"Eyelid ICD trigger is missing: {trigger}")
+        require(
+            icd_items[trigger].get("replace") == expected_code,
+            f"Eyelid ICD mapping changed: {trigger}",
+        )
     for trigger in RETIRED_RVO_TRIGGERS:
         require(trigger not in trigger_map, f"Retired RVO ICD trigger remains: {trigger}")
 

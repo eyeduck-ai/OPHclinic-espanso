@@ -63,6 +63,16 @@ Applicable through September 30, 2026.
 | `;.dryamdod;` | `H35.3110` | Nonexudative age-related macular degeneration, right eye, stage unspecified |
 | `;.dryamdos;` | `H35.3120` | Nonexudative age-related macular degeneration, left eye, stage unspecified |
 | `;.dryamdou;` | `H35.3130` | Nonexudative age-related macular degeneration, bilateral, stage unspecified |
+| `;.ectroll;` | `H02.105` | Unspecified ectropion of left lower eyelid |
+| `;.ectrolu;` | `H02.104` | Unspecified ectropion of left upper eyelid |
+| `;.ectroou;` | `H02.109` | Unspecified ectropion of unspecified eye, unspecified eyelid |
+| `;.ectrorl;` | `H02.102` | Unspecified ectropion of right lower eyelid |
+| `;.ectroru;` | `H02.101` | Unspecified ectropion of right upper eyelid |
+| `;.entroll;` | `H02.005` | Unspecified entropion of left lower eyelid |
+| `;.entrolu;` | `H02.004` | Unspecified entropion of left upper eyelid |
+| `;.entroou;` | `H02.009` | Unspecified entropion of unspecified eye, unspecified eyelid |
+| `;.entrorl;` | `H02.002` | Unspecified entropion of right lower eyelid |
+| `;.entroru;` | `H02.001` | Unspecified entropion of right upper eyelid |
 | `;.erm;` | `H35.379` | Puckering of macula, unspecified eye |
 | `;.ermod;` | `H35.371` | Puckering of macula, right eye |
 | `;.ermos;` | `H35.372` | Puckering of macula, left eye |
@@ -163,6 +173,9 @@ Applicable through September 30, 2026.
 | `;.pterod;` | `H11.001` | Unspecified pterygium of right eye |
 | `;.pteros;` | `H11.002` | Unspecified pterygium of left eye |
 | `;.pterou;` | `H11.003` | Unspecified pterygium of eye, bilateral |
+| `;.ptosisod;` | `H02.401` | Unspecified ptosis of right eyelid |
+| `;.ptosisos;` | `H02.402` | Unspecified ptosis of left eyelid |
+| `;.ptosisou;` | `H02.403` | Unspecified ptosis of bilateral eyelids |
 | `;.punctate;` | `H16.149` | Punctate keratitis, unspecified eye |
 | `;.pvd;` | `H43.819` | Vitreous degeneration, unspecified eye |
 | `;.pvdod;` | `H43.811` | Vitreous degeneration, right eye |
@@ -192,6 +205,11 @@ Applicable through September 30, 2026.
 | `;.tearod;` | `H33.311` | Horseshoe tear of retina without detachment, right eye |
 | `;.tearos;` | `H33.312` | Horseshoe tear of retina without detachment, left eye |
 | `;.tearou;` | `H33.313` | Horseshoe tear of retina without detachment, bilateral |
+| `;.trichill;` | `H02.055` | Trichiasis without entropion left lower eyelid |
+| `;.trichilu;` | `H02.054` | Trichiasis without entropion left upper eyelid |
+| `;.trichiou;` | `H02.059` | Trichiasis without entropion unspecified eye, unspecified eyelid |
+| `;.trichirl;` | `H02.052` | Trichiasis without entropion right lower eyelid |
+| `;.trichiru;` | `H02.051` | Trichiasis without entropion right upper eyelid |
 | `;.ulcer;` | `H16.009` | Unspecified corneal ulcer, unspecified eye |
 | `;.ulcerod;` | `H16.001` | Unspecified corneal ulcer, right eye |
 | `;.ulceros;` | `H16.002` | Unspecified corneal ulcer, left eye |
