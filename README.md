@@ -1,114 +1,35 @@
 # OPHclinic Espanso
 
-Espanso v2 snippets for ophthalmology outpatient notes and ICD-10-CM code entry.
-ICD triggers expand to codes only; diagnosis labels are not inserted into clinical text.
+眼科門診用 Espanso v2 設定。ICD-10-CM trigger 只會輸出 code，不會把疾病名稱插入病歷文字。
 
-## Files
+## 安裝與更新
 
-- `_manifest.yml`: package identity and release version.
-- `package.yml`: package entrypoint.
-- `match/ophthalmology.yml`: shared clinic templates and ICD-10-CM matches.
-- `config/default.yml`: shared global delay and search-bar configuration.
-- `UPDATE_OPHCLINIC.cmd`: interactive manual updater for portable Espanso.
-- `.ophclinic/Update-OPHclinic.ps1`: release downloader, verifier, installer, and rollback logic.
-
-## Triggers
-
-Template triggers start with `;`, for example `;init`, `;oct`, `;ded`, and `;date`.
-ICD-10-CM triggers start with `;.` and end with `;`. The terminator prevents a
-short trigger from expanding before a longer trigger can be typed. Replacements
-remain code only:
-
-- `;.ded;` -> `H04.129`
-- `;.cata;` -> `H25.9`
-- `;.poag;` -> `H40.10X0`
-- `;.pdr;` -> `E11.3599`
-
-The `;date` trigger and date variable expand as `YYYYMMDD`. The scheduling templates
-include `;ntdil`, `;ntcata`, `;ntgs`, `;ntvf`, `;ntfag`, and `;nticg`; CATA and
-LenSx templates are available as `;cataod`, `;cataos`, `;cataou`, `;lensxod`,
-`;lensxos`, and `;lensxou`. IVI templates are `;iviod`, `;ivios`, and `;iviou`.
-
-## Portable Installation
-
-Extract the release bootstrap ZIP into the portable Espanso directory, beside
-`espanso.cmd`. Run:
+1. 從 GitHub 最新 Release 下載 `OPHclinic-espanso-v*.zip`。
+2. 將 ZIP 放到 portable Espanso 根目錄（與 `espanso.cmd` 同一層）。
+3. 在該資料夾開啟 PowerShell，執行：
 
 ```powershell
-.\UPDATE_OPHCLINIC.cmd
+Expand-Archive -LiteralPath .\OPHclinic-espanso-v*.zip -DestinationPath .\ -Force
+.\espanso.cmd restart
 ```
 
-Clients with no working updater, including v0.1.x clients, must manually extract the
-current bootstrap ZIP once. From v0.2.0 onward, the updater also verifies and
-refreshes its own bootstrap files.
+ZIP 只會覆蓋 `.espanso\match\ophthalmology.yml` 和 `.espanso\config\default.yml`。
+`default.yml` 由本專案管理，包含全程式的 `key_delay: 10`、`CTRL+ALT+SPACE` 和 `;help` 搜尋列設定。
 
-The updater discovers the portable directory from its own location, so the drive
-letter does not matter. It downloads the latest non-draft GitHub release, verifies
-both ZIP checksums and manifests, backs up the managed files, replaces the clinic
-match and complete global default configuration, refreshes the bootstrap when
-needed, and restarts Espanso. No scheduled task is created.
+### 從 v0.3.3 遷移
 
-The default update refuses to overwrite the match or global default configuration
-after either has been changed locally. To intentionally restore the GitHub release:
+v1.0.0 起不再有自動更新器。請改用上方 ZIP 流程，不要再執行舊的
+`UPDATE_OPHCLINIC.cmd`。確認設定正常後，舊的 `UPDATE_OPHCLINIC.cmd` 與
+`.ophclinic` 資料夾可自行刪除。
 
-```powershell
-powershell -NoProfile -File .\.ophclinic\Update-OPHclinic.ps1 -Force
-```
+## 使用指令
 
-Runtime state, logs, and the five newest transaction backups are stored under
-`.ophclinic` in the portable directory. During the v0.2.0 migration, the known old
-Notepad-only configuration is backed up and removed. A modified Notepad config is
-preserved with a warning.
+- 一般模板以 `;` 開頭，例如 `;init`、`;date`、`;ded`。
+- ICD-10-CM 指令以 `;.` 開頭且必須以 `;` 結尾，例如 `;.ded;`、`;.poag;`。
+  結尾分號避免短指令在較長指令輸入完成前提早展開。
+- 按 `CTRL+ALT+SPACE` 或輸入 `;help` 開啟 Espanso 搜尋列，依 trigger 或輸出文字查詢。
+- 所有 ICD trigger、code 與 CMS 官方英文診斷描述見 [ICD-10-CM.md](ICD-10-CM.md)。
 
-Updater exit codes:
+多行的 `;init`、`;ded`、CATA 和 LenSx 模板使用 clipboard 輸入模式；ICD 指令不強制輸入模式。
 
-- `0`: installed successfully or already current.
-- `1`: download, validation, installation, or restart failure.
-- `2`: local match/default drift detected; use `-Force` only after reviewing it.
-- `3`: another updater process is already running.
-
-## Finding Commands
-
-Press `CTRL+ALT+SPACE`, or type `;help`, to open Espanso's Search bar. Search by
-trigger or replacement, then choose the desired match. The normal Espanso CLI also
-documents this command:
-
-```powershell
-.\espanso.cmd match list --only-triggers
-```
-
-Some portable Windows builds do not reliably print CLI output, so the Search bar
-is the supported primary command browser for this package.
-
-## Publishing
-
-The manifest uses semantic versioning. A tag such as `v0.3.3` must match both the
-`version` in `_manifest.yml` and `$script:UpdaterVersion` in the PowerShell updater.
-Pushing the tag runs repository validation, Windows updater tests, builds the
-managed and bootstrap ZIP files, and creates the GitHub release.
-
-Local validation with the cached CMS file:
-
-```powershell
-python .\scripts\validate_config.py --cms-file "C:\path\to\icd10cm_codes_2026.txt"
-python .\scripts\build_release.py --tag v0.3.3 --output dist
-powershell -NoProfile -File .\tests\Test-Update-OPHclinic.ps1
-```
-
-## Injection Compatibility
-
-The multiline `;init`, `;ded`, CATA, and LenSx templates use `force_mode: clipboard`.
-ICD matches do not force an injection mode. The managed global `config/default.yml`
-applies a 10 ms key delay to all applications and configures the Search bar shortcuts.
-
-## ICD Source And Safety
-
-The current codes are validated against the CMS April 1, 2026 ICD-10-CM code file,
-applicable through September 30, 2026. Clinical staff remain responsible for
-confirming that each code and template is appropriate for the encounter.
-
-- CMS: https://www.cms.gov/medicare/coding-billing/icd-10-codes
-- CDC: https://www.cdc.gov/nchs/icd/icd-10-cm/files.html
-
-Do not commit patient information, credentials, tokens, or private clinic data to
-this public repository.
+請自行確認每一項模板與 ICD-10-CM code 是否符合當次看診。

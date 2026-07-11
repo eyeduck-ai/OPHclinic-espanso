@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Build deterministic managed and bootstrap release archives."""
+"""Build the deterministic manual-install Espanso release archive."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import shutil
 import zipfile
 from pathlib import Path
@@ -14,8 +13,11 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REPOSITORY = "eyeduck-ai/OPHclinic-espanso"
 ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
+RELEASE_FILES = {
+    ".espanso/config/default.yml": ROOT / "config" / "default.yml",
+    ".espanso/match/ophthalmology.yml": ROOT / "match" / "ophthalmology.yml",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -26,11 +28,11 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def add_bytes(archive: zipfile.ZipFile, name: str, content: bytes) -> None:
-    info = zipfile.ZipInfo(name, date_time=ZIP_TIMESTAMP)
+def add_file(archive: zipfile.ZipFile, archive_name: str, source: Path) -> None:
+    info = zipfile.ZipInfo(archive_name, date_time=ZIP_TIMESTAMP)
     info.compress_type = zipfile.ZIP_DEFLATED
     info.external_attr = 0o644 << 16
-    archive.writestr(info, content)
+    archive.writestr(info, source.read_bytes())
 
 
 def write_checksum(path: Path) -> Path:
@@ -41,7 +43,7 @@ def write_checksum(path: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tag", required=True, help="Release tag, for example v0.1.0")
+    parser.add_argument("--tag", required=True, help="Release tag, for example v1.0.0")
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
     args = parser.parse_args()
 
@@ -56,77 +58,25 @@ def main() -> int:
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
-    managed_files = {
-        "config/default.yml": (ROOT / "config" / "default.yml").read_bytes(),
-        "match/ophthalmology.yml": (ROOT / "match" / "ophthalmology.yml").read_bytes(),
-    }
-    release_manifest = {
-        "schema_version": 2,
-        "package": "ophthalmology-clinic",
-        "repository": REPOSITORY,
-        "version": version,
-        "tag": args.tag,
-        "files": {
-            name: {
-                "sha256": hashlib.sha256(content).hexdigest(),
-                "size": len(content),
-            }
-            for name, content in sorted(managed_files.items())
-        },
-    }
-    release_manifest_bytes = (
-        json.dumps(release_manifest, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    missing_files = [name for name, path in RELEASE_FILES.items() if not path.is_file()]
+    if missing_files:
+        raise SystemExit(f"Missing release files: {missing_files}")
 
-    managed_name = f"OPHclinic-espanso-{args.tag}.zip"
-    managed_path = output / managed_name
-    with zipfile.ZipFile(managed_path, "w") as archive:
-        for name, content in sorted(managed_files.items()):
-            add_bytes(archive, name, content)
-        add_bytes(archive, "release-manifest.json", release_manifest_bytes)
-    managed_checksum = write_checksum(managed_path)
+    archive_name = f"OPHclinic-espanso-{args.tag}.zip"
+    archive_path = output / archive_name
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        for archive_member, source in sorted(RELEASE_FILES.items()):
+            add_file(archive, archive_member, source)
 
-    bootstrap_name = f"OPHclinic-espanso-bootstrap-{args.tag}.zip"
-    bootstrap_path = output / bootstrap_name
-    bootstrap_readme = (
-        "OPHclinic Espanso portable updater\r\n"
-        "\r\n"
-        "1. Extract this ZIP into the portable Espanso directory beside espanso.cmd.\r\n"
-        "2. Run UPDATE_OPHCLINIC.cmd.\r\n"
-        "3. Clients without a working updater must extract this bootstrap once before updating.\r\n"
-        "4. The updater manages both the clinic match and global default configuration.\r\n"
-    ).encode("ascii")
-    bootstrap_files = {
-        ".ophclinic/Update-OPHclinic.ps1": (
-            ROOT / ".ophclinic" / "Update-OPHclinic.ps1"
-        ).read_bytes(),
-        "OPHCLINIC-BOOTSTRAP.txt": bootstrap_readme,
-        "UPDATE_OPHCLINIC.cmd": (ROOT / "UPDATE_OPHCLINIC.cmd").read_bytes(),
-    }
-    bootstrap_manifest = {
-        "schema_version": 1,
-        "repository": REPOSITORY,
-        "version": version,
-        "tag": args.tag,
-        "files": {
-            name: {
-                "sha256": hashlib.sha256(content).hexdigest(),
-                "size": len(content),
-            }
-            for name, content in sorted(bootstrap_files.items())
-        },
-    }
-    bootstrap_manifest_bytes = (
-        json.dumps(bootstrap_manifest, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
-    with zipfile.ZipFile(bootstrap_path, "w") as archive:
-        for name, content in sorted(bootstrap_files.items()):
-            add_bytes(archive, name, content)
-        add_bytes(archive, "bootstrap-manifest.json", bootstrap_manifest_bytes)
-    bootstrap_checksum = write_checksum(bootstrap_path)
+    with zipfile.ZipFile(archive_path) as archive:
+        actual_names = sorted(archive.namelist())
+    expected_names = sorted(RELEASE_FILES)
+    if actual_names != expected_names:
+        raise SystemExit(f"Unexpected release archive contents: {actual_names}")
 
-    for path in (managed_path, managed_checksum, bootstrap_path, bootstrap_checksum):
-        print(f"BUILT {path.name} sha256={sha256_file(path)}")
+    checksum_path = write_checksum(archive_path)
+    print(f"BUILT {archive_path.name} sha256={sha256_file(archive_path)}")
+    print(f"BUILT {checksum_path.name} sha256={sha256_file(checksum_path)}")
     return 0
 
 

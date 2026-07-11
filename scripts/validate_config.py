@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the Espanso package and its ICD-10-CM invariants."""
+"""Validate Espanso settings and the generated ICD-10-CM reference."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ CMS_URL = (
 CMS_ZIP_SHA256 = "4fd9d8b37f02ab42827c7e7be30595c005b0cc3a6bae7a515e3f4c86b6918688"
 EXPECTED_ICD_COUNT = 201
 EXPECTED_MATCH_COUNT = 235
+ICD_REFERENCE_PATH = ROOT / "ICD-10-CM.md"
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 ICD_PATTERN = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,7})?$")
 
@@ -91,6 +92,10 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def normalized_code(code: str) -> str:
+    return code.replace(".", "").upper()
+
+
 def load_yaml(relative_path: str):
     path = ROOT / relative_path
     require(path.is_file(), f"Missing required file: {relative_path}")
@@ -100,7 +105,7 @@ def load_yaml(relative_path: str):
         raise ValidationError(f"Invalid YAML in {relative_path}: {error}") from error
 
 
-def load_cms_codes(cms_file: Path | None) -> set[str]:
+def load_cms_descriptions(cms_file: Path | None) -> dict[str, str]:
     if cms_file is not None:
         require(cms_file.is_file(), f"CMS code file not found: {cms_file}")
         content = cms_file.read_bytes()
@@ -139,9 +144,16 @@ def load_cms_codes(cms_file: Path | None) -> set[str]:
     except UnicodeDecodeError as error:
         raise ValidationError(f"CMS code file is not UTF-8: {error}") from error
 
-    codes = {line.split()[0].upper() for line in lines if line.strip()}
-    require(len(codes) > 70_000, f"CMS code list is unexpectedly small: {len(codes)}")
-    return codes
+    descriptions: dict[str, str] = {}
+    for line in lines:
+        if not line.strip():
+            continue
+        parts = line.split(maxsplit=1)
+        require(len(parts) == 2, f"CMS code entry has no description: {line!r}")
+        code, description = parts
+        descriptions[code.upper()] = " ".join(description.split())
+    require(len(descriptions) > 70_000, f"CMS code list is unexpectedly small: {len(descriptions)}")
+    return descriptions
 
 
 def collect_trigger_map(matches: list[dict]) -> dict[str, dict]:
@@ -162,7 +174,29 @@ def collect_trigger_map(matches: list[dict]) -> dict[str, dict]:
     return trigger_map
 
 
-def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
+def render_icd_reference(
+    icd_items: dict[str, dict], cms_descriptions: dict[str, str]
+) -> str:
+    lines = [
+        "# ICD-10-CM Reference",
+        "",
+        "This table is for review only. Espanso ICD triggers insert the code only.",
+        "The diagnosis description is never inserted into clinical text.",
+        "",
+        "Source: CMS April 1, 2026 ICD-10-CM code descriptions.",
+        "Applicable through September 30, 2026.",
+        "",
+        "| Trigger | ICD-10-CM code | Official CMS description |",
+        "| --- | --- | --- |",
+    ]
+    for trigger in sorted(icd_items):
+        code = icd_items[trigger]["replace"]
+        description = cms_descriptions[normalized_code(code)].replace("|", "\\|")
+        lines.append(f"| `{trigger}` | `{code}` | {description} |")
+    return "\n".join(lines) + "\n"
+
+
+def validate_repository(cms_file: Path | None, write_icd_reference: bool) -> dict[str, int | str]:
     manifest = load_yaml("_manifest.yml")
     package = load_yaml("package.yml")
     match_config = load_yaml("match/ophthalmology.yml")
@@ -176,14 +210,6 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         manifest.get("homepage") == "https://github.com/eyeduck-ai/OPHclinic-espanso",
         "Manifest homepage must point to the GitHub repository",
     )
-    updater_text = (ROOT / ".ophclinic" / "Update-OPHclinic.ps1").read_text(encoding="utf-8")
-    updater_version = re.search(
-        r'^\$script:UpdaterVersion\s*=\s*\[Version\]"([^"]+)"$',
-        updater_text,
-        re.MULTILINE,
-    )
-    require(updater_version is not None, "Updater version declaration is missing")
-    require(updater_version.group(1) == version, "Updater version does not match manifest version")
     require(package == {"imports": ["match/ophthalmology.yml"]}, "Unexpected package.yml imports")
 
     require(isinstance(match_config, dict), "match/ophthalmology.yml must contain an object")
@@ -228,7 +254,10 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         ";ded multiline replacement changed unexpectedly",
     )
     init_lines = trigger_map[";init"].get("replace", "").splitlines()
-    require(len(init_lines) == 9 and init_lines[0] == "VA:" and init_lines[-1] == "OCT: flat macula OU", ";init multiline replacement is incomplete")
+    require(
+        len(init_lines) == 9 and init_lines[0] == "VA:" and init_lines[-1] == "OCT: flat macula OU",
+        ";init multiline replacement is incomplete",
+    )
 
     for trigger in (";dilate", ";cataNT", ";cataop"):
         require(trigger not in trigger_map, f"Retired template trigger remains: {trigger}")
@@ -269,13 +298,23 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         require(trigger in icd_items, f"Original ICD trigger is missing: {trigger}")
         require(icd_items[trigger].get("replace") == expected_code, f"Original ICD mapping changed: {trigger}")
 
-    cms_codes = load_cms_codes(cms_file)
+    cms_descriptions = load_cms_descriptions(cms_file)
     missing_codes = sorted(
         (trigger, item["replace"])
         for trigger, item in icd_items.items()
-        if item["replace"].replace(".", "").upper() not in cms_codes
+        if normalized_code(item["replace"]) not in cms_descriptions
     )
     require(not missing_codes, f"ICD codes absent from CMS FY2026: {missing_codes[:10]}")
+
+    reference = render_icd_reference(icd_items, cms_descriptions)
+    if write_icd_reference:
+        ICD_REFERENCE_PATH.write_text(reference, encoding="utf-8")
+    else:
+        require(ICD_REFERENCE_PATH.is_file(), "Missing ICD-10-CM.md; run with --write-icd-reference")
+        require(
+            ICD_REFERENCE_PATH.read_text(encoding="utf-8") == reference,
+            "ICD-10-CM.md is out of date; run with --write-icd-reference",
+        )
 
     require(
         default_config
@@ -286,14 +325,13 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         },
         "config/default.yml is not the approved global configuration",
     )
-    require(not (ROOT / "config" / "notepad.yml").exists(), "Legacy config/notepad.yml must be removed")
 
     sensitive_patterns = {
         "GitHub token": re.compile(r"\b(?:gho|ghp|github_pat)_[A-Za-z0-9_]+"),
         "private key": re.compile(r"-----BEGIN (?:RSA |OPENSSH )?PRIVATE KEY-----"),
         "password assignment": re.compile(r"(?im)^\s*(?:password|passwd|api[_-]?key|secret|token)\s*[:=]\s*\S+"),
     }
-    scanned_suffixes = {".yml", ".yaml", ".md", ".py", ".ps1", ".cmd", ".txt"}
+    scanned_suffixes = {".yml", ".yaml", ".md", ".py", ".txt"}
     for path in ROOT.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in scanned_suffixes:
             continue
@@ -307,7 +345,7 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         "version": version,
         "matches": len(trigger_map),
         "icd_triggers": len(icd_items),
-        "cms_codes": len(cms_codes),
+        "cms_codes": len(cms_descriptions),
     }
 
 
@@ -318,13 +356,20 @@ def main() -> int:
         type=Path,
         help="Use an already extracted CMS icd10cm_codes_2026.txt file",
     )
+    parser.add_argument(
+        "--write-icd-reference",
+        action="store_true",
+        help="Regenerate ICD-10-CM.md from the current matches and CMS descriptions",
+    )
     args = parser.parse_args()
     try:
-        summary = validate_repository(args.cms_file)
+        summary = validate_repository(args.cms_file, args.write_icd_reference)
     except ValidationError as error:
         print(f"VALIDATION FAILED: {error}", file=sys.stderr)
         return 1
 
+    if args.write_icd_reference:
+        print("WROTE ICD-10-CM.md")
     print(
         "VALIDATION OK: "
         f"version={summary['version']} matches={summary['matches']} "

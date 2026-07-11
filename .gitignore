@@ -1,10 +1,3 @@
 dist/
 __pycache__/
 *.pyc
-
-# Portable client runtime state
-.ophclinic/backups/
-.ophclinic/staging/
-.ophclinic/state.json
-.ophclinic/update.log
-.ophclinic/update.lock
