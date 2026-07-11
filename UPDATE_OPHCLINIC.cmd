@@ -8,7 +8,7 @@ if not exist "%UPDATER%" (
   exit /b 1
 )
 
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%UPDATER%" -PortableRoot "%~dp0" %*
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%UPDATER%" -PortableRoot "%~dp0." %*
 set "UPDATE_EXIT=%ERRORLEVEL%"
 
 echo.

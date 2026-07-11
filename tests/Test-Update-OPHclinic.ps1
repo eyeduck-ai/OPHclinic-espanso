@@ -194,6 +194,10 @@ function Pass-Test {
 
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 try {
+    $cmdText = Get-Content -LiteralPath $sourceCmd -Raw -Encoding ASCII
+    Assert-True ($cmdText.Contains('-PortableRoot "%~dp0."')) "CMD updater passes a root path with a trailing backslash"
+    Pass-Test "CMD updater portable-root quoting"
+
     $validMetadata = New-ReleaseFixture -Name "valid-release"
     $releaseMatchHash = Get-TestHash -Path $sourceMatch
     $releaseDefaultHash = Get-TestHash -Path $sourceDefault
