@@ -14,7 +14,7 @@ ICD triggers expand to codes only; diagnosis labels are not inserted into clinic
 
 ## Triggers
 
-Template triggers start with `;`, for example `;init`, `;oct`, and `;ded`.
+Template triggers start with `;`, for example `;init`, `;oct`, `;ded`, and `;date`.
 ICD-10-CM triggers start with `;.` and end with `;`. The terminator prevents a
 short trigger from expanding before a longer trigger can be typed. Replacements
 remain code only:
@@ -24,7 +24,10 @@ remain code only:
 - `;.poag;` -> `H40.10X0`
 - `;.pdr;` -> `E11.3599`
 
-The date variable expands as `YYYYMMDD`.
+The `;date` trigger and date variable expand as `YYYYMMDD`. The scheduling templates
+include `;ntdil`, `;ntcata`, `;ntgs`, `;ntvf`, `;ntfag`, and `;nticg`; CATA and
+LenSx templates are available as `;cataod`, `;cataos`, `;cataou`, `;lensxod`,
+`;lensxos`, and `;lensxou`.
 
 ## Portable Installation
 
@@ -35,9 +38,9 @@ Extract the release bootstrap ZIP into the portable Espanso directory, beside
 .\UPDATE_OPHCLINIC.cmd
 ```
 
-Clients currently using v0.1.x must manually extract the v0.2.0 bootstrap once,
-because the v0.1.x updater cannot update itself or read the schema 2 release. From
-v0.2.0 onward, the updater also verifies and refreshes its own bootstrap files.
+Clients with no working updater, including v0.1.x clients, must manually extract the
+current bootstrap ZIP once. From v0.2.0 onward, the updater also verifies and
+refreshes its own bootstrap files.
 
 The updater discovers the portable directory from its own location, so the drive
 letter does not matter. It downloads the latest non-draft GitHub release, verifies
@@ -79,7 +82,7 @@ is the supported primary command browser for this package.
 
 ## Publishing
 
-The manifest uses semantic versioning. A tag such as `v0.2.0` must match both the
+The manifest uses semantic versioning. A tag such as `v0.3.0` must match both the
 `version` in `_manifest.yml` and `$script:UpdaterVersion` in the PowerShell updater.
 Pushing the tag runs repository validation, Windows updater tests, builds the
 managed and bootstrap ZIP files, and creates the GitHub release.
@@ -88,15 +91,15 @@ Local validation with the cached CMS file:
 
 ```powershell
 python .\scripts\validate_config.py --cms-file "C:\path\to\icd10cm_codes_2026.txt"
-python .\scripts\build_release.py --tag v0.2.0 --output dist
+python .\scripts\build_release.py --tag v0.3.0 --output dist
 powershell -NoProfile -File .\tests\Test-Update-OPHclinic.ps1
 ```
 
 ## Injection Compatibility
 
-The multiline `;init` and `;ded` templates use `force_mode: clipboard`. ICD matches
-do not force an injection mode. The managed global `config/default.yml` applies a
-10 ms key delay to all applications and configures the Search bar shortcuts.
+The multiline `;init`, `;ded`, CATA, and LenSx templates use `force_mode: clipboard`.
+ICD matches do not force an injection mode. The managed global `config/default.yml`
+applies a 10 ms key delay to all applications and configures the Search bar shortcuts.
 
 ## ICD Source And Safety
 

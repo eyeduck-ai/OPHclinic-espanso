@@ -22,8 +22,39 @@ CMS_URL = (
 )
 CMS_ZIP_SHA256 = "4fd9d8b37f02ab42827c7e7be30595c005b0cc3a6bae7a515e3f4c86b6918688"
 EXPECTED_ICD_COUNT = 201
+EXPECTED_MATCH_COUNT = 234
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 ICD_PATTERN = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,7})?$")
+
+EXPECTED_SINGLE_LINE_TEMPLATES = {
+    ";date": "{{today}}",
+    ";ntdil": "- arrange dilated exam NT",
+    ";ntcata": "- arrange CATA survey NT",
+    ";ntgs": "- arrange glaucoma survey NT(dilated+GOCT)",
+    ";ntvf": "- arrange VF 24-2/30-2? NT",
+    ";ntfag": "- arrange FAG NT",
+    ";nticg": "- arrange FAG+ICG NT",
+    ";acata": "- APPLY Cataract (OD/OS/OU)? {{today}}",
+    ";ablue": "- APPLY Trypan blue (OD/OS/OU)? {{today}}",
+    ";aivi": "- APPLY IVI-(E2/E8/V/L/O)? {{today}}",
+    ";vt": "- arrange VT on {{today}}",
+    ";mp": "- arrange VT+MP(sharkskin+TWIN) on {{today}}",
+    ";pvd": (
+        "- Explain warning signs of retinal tear/detachment. Return to OPD/ER "
+        "immediately if flashes, floaters, or visual field defect worsen."
+    ),
+    ";dr": "- Suggest blood sugar and blood pressure control.",
+}
+
+EXPECTED_CATA_FIRST_LINES = {
+    ";cataod": "- arrange CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$",
+    ";cataos": "- arrange CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$",
+    ";cataou": "- arrange CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$",
+    ";lensxod": "- arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$",
+    ";lensxos": "- arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$",
+    ";lensxou": "- arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$",
+}
+CATA_SECOND_LINE = " - GL before? driving? night driving? bus? TV? computer? cellphone? book?"
 
 ORIGINAL_ICD_MATCHES = {
     ";.ded;": "H04.129",
@@ -159,6 +190,10 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     matches = match_config.get("matches")
     require(isinstance(matches, list), "matches must be a list")
     trigger_map = collect_trigger_map(matches)
+    require(
+        len(trigger_map) == EXPECTED_MATCH_COUNT,
+        f"Expected {EXPECTED_MATCH_COUNT} triggers, found {len(trigger_map)}",
+    )
     prefix_pairs = sorted(
         (shorter, longer)
         for shorter in trigger_map
@@ -172,10 +207,12 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
         for trigger, item in trigger_map.items()
         if "force_mode" in item
     }
-    require(
-        force_modes == {";init": "clipboard", ";ded": "clipboard"},
-        f"Unexpected force_mode entries: {force_modes}",
-    )
+    expected_force_modes = {
+        ";init": "clipboard",
+        ";ded": "clipboard",
+        **{trigger: "clipboard" for trigger in EXPECTED_CATA_FIRST_LINES},
+    }
+    require(force_modes == expected_force_modes, f"Unexpected force_mode entries: {force_modes}")
     require(
         trigger_map[";ded"].get("replace", "").splitlines()
         == [
@@ -186,6 +223,20 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     )
     init_lines = trigger_map[";init"].get("replace", "").splitlines()
     require(len(init_lines) == 9 and init_lines[0] == "VA:" and init_lines[-1] == "OCT: flat macula OU", ";init multiline replacement is incomplete")
+
+    for trigger in (";dilate", ";cataNT", ";cataop"):
+        require(trigger not in trigger_map, f"Retired template trigger remains: {trigger}")
+    for trigger, replacement in EXPECTED_SINGLE_LINE_TEMPLATES.items():
+        require(
+            trigger_map.get(trigger, {}).get("replace") == replacement,
+            f"Unexpected replacement for {trigger}",
+        )
+    for trigger, first_line in EXPECTED_CATA_FIRST_LINES.items():
+        require(
+            trigger_map.get(trigger, {}).get("replace", "").splitlines()
+            == [first_line, CATA_SECOND_LINE],
+            f"Unexpected multiline replacement for {trigger}",
+        )
 
     icd_items = {
         trigger: item

@@ -22,6 +22,9 @@ matches:
   - trigger: ";hx"
     replace: "DM- HTN- Allergy-"
 
+  - trigger: ";date"
+    replace: "{{today}}"
+
   - trigger: ";sch"
     replace: "Schirmer test<5mm OU"
 
@@ -52,14 +55,80 @@ matches:
   - trigger: ";ivios"
     replace: ", IVI-$|$ OS {{today}}"
 
-  - trigger: ";dilate"
+  - trigger: ";ntdil"
     replace: "- arrange dilated exam NT"
 
-  - trigger: ";cataNT"
+  - trigger: ";ntcata"
     replace: "- arrange CATA survey NT"
 
-  - trigger: ";cataop"
-    replace: "- arrange CATA(NHI/EDOF/Trifocal T?) + Lensx on {{today}}. TEL: $|$"
+  - trigger: ";cataod"
+    force_mode: clipboard
+    replace: |
+      - arrange CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";cataos"
+    force_mode: clipboard
+    replace: |
+      - arrange CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";cataou"
+    force_mode: clipboard
+    replace: |
+      - arrange CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";lensxod"
+    force_mode: clipboard
+    replace: |
+      - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";lensxos"
+    force_mode: clipboard
+    replace: |
+      - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";lensxou"
+    force_mode: clipboard
+    replace: |
+      - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$
+       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+
+  - trigger: ";ntgs"
+    replace: "- arrange glaucoma survey NT(dilated+GOCT)"
+
+  - trigger: ";ntvf"
+    replace: "- arrange VF 24-2/30-2? NT"
+
+  - trigger: ";ntfag"
+    replace: "- arrange FAG NT"
+
+  - trigger: ";nticg"
+    replace: "- arrange FAG+ICG NT"
+
+  - trigger: ";acata"
+    replace: "- APPLY Cataract (OD/OS/OU)? {{today}}"
+
+  - trigger: ";ablue"
+    replace: "- APPLY Trypan blue (OD/OS/OU)? {{today}}"
+
+  - trigger: ";aivi"
+    replace: "- APPLY IVI-(E2/E8/V/L/O)? {{today}}"
+
+  - trigger: ";vt"
+    replace: "- arrange VT on {{today}}"
+
+  - trigger: ";mp"
+    replace: "- arrange VT+MP(sharkskin+TWIN) on {{today}}"
+
+  - trigger: ";pvd"
+    replace: "- Explain warning signs of retinal tear/detachment. Return to OPD/ER immediately if flashes, floaters, or visual field defect worsen."
+
+  - trigger: ";dr"
+    replace: "- Suggest blood sugar and blood pressure control."
 
   - trigger: ";ded"
     force_mode: clipboard

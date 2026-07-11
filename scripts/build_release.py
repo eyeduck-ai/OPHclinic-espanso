@@ -93,7 +93,7 @@ def main() -> int:
         "\r\n"
         "1. Extract this ZIP into the portable Espanso directory beside espanso.cmd.\r\n"
         "2. Run UPDATE_OPHCLINIC.cmd.\r\n"
-        "3. v0.1.x clients must extract this v0.2.0 bootstrap once before updating.\r\n"
+        "3. Clients without a working updater must extract this bootstrap once before updating.\r\n"
         "4. The updater manages both the clinic match and global default configuration.\r\n"
     ).encode("ascii")
     bootstrap_files = {

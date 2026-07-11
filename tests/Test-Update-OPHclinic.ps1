@@ -10,6 +10,12 @@ $sourceMatch = Join-Path $repoRoot "match\ophthalmology.yml"
 $sourceDefault = Join-Path $repoRoot "config\default.yml"
 $sourceUpdater = Join-Path $repoRoot ".ophclinic\Update-OPHclinic.ps1"
 $sourceCmd = Join-Path $repoRoot "UPDATE_OPHCLINIC.cmd"
+$manifestText = Get-Content -LiteralPath (Join-Path $repoRoot "_manifest.yml") -Raw -Encoding UTF8
+if ($manifestText -notmatch '(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$') {
+    throw "Manifest version is missing or invalid"
+}
+$releaseVersion = $Matches[1]
+$releaseTag = "v$releaseVersion"
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ophclinic updater tests " + [Guid]::NewGuid().ToString("N"))
 $testsPassed = 0
 $knownNotepad = "filter_exec: '(?i)notepad\.exe$'`nkey_delay: 10`n"
@@ -87,7 +93,7 @@ function New-ReleaseFixture {
     Copy-Item -LiteralPath $sourceDefault -Destination (Join-Path $managedStage "config\default.yml")
     Copy-Item -LiteralPath $sourceUpdater -Destination (Join-Path $bootstrapStage ".ophclinic\Update-OPHclinic.ps1")
     Copy-Item -LiteralPath $sourceCmd -Destination (Join-Path $bootstrapStage "UPDATE_OPHCLINIC.cmd")
-    Set-Content -LiteralPath (Join-Path $bootstrapStage "OPHCLINIC-BOOTSTRAP.txt") -Value "fixture bootstrap v0.2.0" -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $bootstrapStage "OPHCLINIC-BOOTSTRAP.txt") -Value "fixture bootstrap $releaseTag" -Encoding ASCII
 
     $managedFiles = [ordered]@{
         "config/default.yml" = New-FileRecord -Path (Join-Path $managedStage "config\default.yml")
@@ -97,8 +103,8 @@ function New-ReleaseFixture {
         schema_version = 2
         package = "ophthalmology-clinic"
         repository = "eyeduck-ai/OPHclinic-espanso"
-        version = "0.2.0"
-        tag = "v0.2.0"
+        version = $releaseVersion
+        tag = $releaseTag
         files = $managedFiles
     }
     $releaseManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $managedStage "release-manifest.json") -Encoding UTF8
@@ -111,8 +117,8 @@ function New-ReleaseFixture {
     $bootstrapManifest = [ordered]@{
         schema_version = 1
         repository = "eyeduck-ai/OPHclinic-espanso"
-        version = "0.2.0"
-        tag = "v0.2.0"
+        version = $releaseVersion
+        tag = $releaseTag
         files = $bootstrapFiles
     }
     $bootstrapManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $bootstrapStage "bootstrap-manifest.json") -Encoding UTF8
@@ -121,7 +127,7 @@ function New-ReleaseFixture {
         Set-Content -LiteralPath (Join-Path $managedStage "unexpected.txt") -Value "unexpected" -Encoding ASCII
     }
 
-    $managedName = "OPHclinic-espanso-v0.2.0.zip"
+    $managedName = "OPHclinic-espanso-$releaseTag.zip"
     $managedZip = Join-Path $fixtureRoot $managedName
     Compress-Archive -Path (Join-Path $managedStage "*") -DestinationPath $managedZip -CompressionLevel Optimal
     $managedHash = Get-TestHash -Path $managedZip
@@ -131,7 +137,7 @@ function New-ReleaseFixture {
     }
     Set-Content -LiteralPath "$managedZip.sha256" -Value "$managedHash  $managedName" -Encoding ASCII
 
-    $bootstrapName = "OPHclinic-espanso-bootstrap-v0.2.0.zip"
+    $bootstrapName = "OPHclinic-espanso-bootstrap-$releaseTag.zip"
     $bootstrapZip = Join-Path $fixtureRoot $bootstrapName
     Compress-Archive -Path (Join-Path $bootstrapStage "*") -DestinationPath $bootstrapZip -CompressionLevel Optimal
     $bootstrapHash = Get-TestHash -Path $bootstrapZip
@@ -142,10 +148,10 @@ function New-ReleaseFixture {
     Set-Content -LiteralPath "$bootstrapZip.sha256" -Value "$bootstrapHash  $bootstrapName" -Encoding ASCII
 
     $metadata = [ordered]@{
-        tag_name = "v0.2.0"
+        tag_name = $releaseTag
         draft = $false
         prerelease = $false
-        html_url = "https://example.invalid/release/v0.2.0"
+        html_url = "https://example.invalid/release/$releaseTag"
         assets = @(
             [ordered]@{ name = $managedName; browser_download_url = ([Uri]$managedZip).AbsoluteUri },
             [ordered]@{ name = "$managedName.sha256"; browser_download_url = ([Uri]"$managedZip.sha256").AbsoluteUri },
@@ -217,7 +223,7 @@ try {
     $backupCount = @(Get-ChildItem -LiteralPath (Join-Path $managedRoot ".ophclinic\backups") -Directory).Count
     $result = Invoke-TestUpdater -PortableRoot $managedRoot -MetadataPath $validMetadata -SkipRestart
     Assert-True ($result.ExitCode -eq 0) "No-op update failed: $($result.Output)"
-    Assert-True ($result.Output -match "Already current at v0.2.0") "No-op did not report current version"
+    Assert-True ($result.Output -match [regex]::Escape("Already current at $releaseTag")) "No-op did not report current version"
     Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $managedRoot ".ophclinic\backups") -Directory).Count -eq $backupCount) "No-op update created a backup"
     Pass-Test "already-current no-op"
 
