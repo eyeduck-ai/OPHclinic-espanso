@@ -10,7 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$script:UpdaterVersion = [Version]"0.3.1"
+$script:UpdaterVersion = [Version]"0.3.2"
 $script:StateDirectory = $null
 $script:LogPath = $null
 $script:EspansoCommand = $null

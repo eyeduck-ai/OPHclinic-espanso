@@ -22,7 +22,7 @@ CMS_URL = (
 )
 CMS_ZIP_SHA256 = "4fd9d8b37f02ab42827c7e7be30595c005b0cc3a6bae7a515e3f4c86b6918688"
 EXPECTED_ICD_COUNT = 201
-EXPECTED_MATCH_COUNT = 234
+EXPECTED_MATCH_COUNT = 235
 SEMVER_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 ICD_PATTERN = re.compile(r"^[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,7})?$")
 
@@ -30,7 +30,7 @@ EXPECTED_SINGLE_LINE_TEMPLATES = {
     ";date": "{{today}}",
     ";ntdil": "- arrange dilated exam NT",
     ";ntcata": "- arrange CATA survey NT",
-    ";ntgs": "- arrange glaucoma survey NT(dilated+GOCT)",
+    ";ntgs": "- arrange VF 24-2/30-2$|$ NT",
     ";ntvf": "- arrange VF 24-2/30-2? NT",
     ";ntfag": "- arrange FAG NT",
     ";nticg": "- arrange FAG+ICG NT",
@@ -54,7 +54,13 @@ EXPECTED_CATA_FIRST_LINES = {
     ";lensxos": "- arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$",
     ";lensxou": "- arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$",
 }
-CATA_SECOND_LINE = " - GL before? driving? night driving? bus? TV? computer? cellphone? book?"
+CATA_SECOND_LINE = "- GL before? driving? night driving? bus? TV? computer? cellphone? book?"
+
+EXPECTED_IVI_TEMPLATES = {
+    ";iviod": ", IVI-$|$ OD {{today}}",
+    ";ivios": ", IVI-$|$ OS {{today}}",
+    ";iviou": ", IVI-$|$ OU {{today}}",
+}
 
 ORIGINAL_ICD_MATCHES = {
     ";.ded;": "H04.129",
@@ -227,6 +233,11 @@ def validate_repository(cms_file: Path | None) -> dict[str, int | str]:
     for trigger in (";dilate", ";cataNT", ";cataop"):
         require(trigger not in trigger_map, f"Retired template trigger remains: {trigger}")
     for trigger, replacement in EXPECTED_SINGLE_LINE_TEMPLATES.items():
+        require(
+            trigger_map.get(trigger, {}).get("replace") == replacement,
+            f"Unexpected replacement for {trigger}",
+        )
+    for trigger, replacement in EXPECTED_IVI_TEMPLATES.items():
         require(
             trigger_map.get(trigger, {}).get("replace") == replacement,
             f"Unexpected replacement for {trigger}",

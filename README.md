@@ -27,7 +27,7 @@ remain code only:
 The `;date` trigger and date variable expand as `YYYYMMDD`. The scheduling templates
 include `;ntdil`, `;ntcata`, `;ntgs`, `;ntvf`, `;ntfag`, and `;nticg`; CATA and
 LenSx templates are available as `;cataod`, `;cataos`, `;cataou`, `;lensxod`,
-`;lensxos`, and `;lensxou`.
+`;lensxos`, and `;lensxou`. IVI templates are `;iviod`, `;ivios`, and `;iviou`.
 
 ## Portable Installation
 
@@ -82,7 +82,7 @@ is the supported primary command browser for this package.
 
 ## Publishing
 
-The manifest uses semantic versioning. A tag such as `v0.3.1` must match both the
+The manifest uses semantic versioning. A tag such as `v0.3.2` must match both the
 `version` in `_manifest.yml` and `$script:UpdaterVersion` in the PowerShell updater.
 Pushing the tag runs repository validation, Windows updater tests, builds the
 managed and bootstrap ZIP files, and creates the GitHub release.
@@ -91,7 +91,7 @@ Local validation with the cached CMS file:
 
 ```powershell
 python .\scripts\validate_config.py --cms-file "C:\path\to\icd10cm_codes_2026.txt"
-python .\scripts\build_release.py --tag v0.3.1 --output dist
+python .\scripts\build_release.py --tag v0.3.2 --output dist
 powershell -NoProfile -File .\tests\Test-Update-OPHclinic.ps1
 ```
 

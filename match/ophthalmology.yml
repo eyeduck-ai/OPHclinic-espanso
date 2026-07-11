@@ -55,6 +55,9 @@ matches:
   - trigger: ";ivios"
     replace: ", IVI-$|$ OS {{today}}"
 
+  - trigger: ";iviou"
+    replace: ", IVI-$|$ OU {{today}}"
+
   - trigger: ";ntdil"
     replace: "- arrange dilated exam NT"
 
@@ -65,40 +68,40 @@ matches:
     force_mode: clipboard
     replace: |
       - arrange CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";cataos"
     force_mode: clipboard
     replace: |
       - arrange CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";cataou"
     force_mode: clipboard
     replace: |
       - arrange CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";lensxod"
     force_mode: clipboard
     replace: |
       - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OD on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";lensxos"
     force_mode: clipboard
     replace: |
       - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OS on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";lensxou"
     force_mode: clipboard
     replace: |
       - arrange LenSx+CATA (please explain NHI/EDOF/Trifocal) OU on {{today}}?. TEL: $|$
-       - GL before? driving? night driving? bus? TV? computer? cellphone? book?
+      - GL before? driving? night driving? bus? TV? computer? cellphone? book?
 
   - trigger: ";ntgs"
-    replace: "- arrange glaucoma survey NT(dilated+GOCT)"
+    replace: "- arrange VF 24-2/30-2$|$ NT"
 
   - trigger: ";ntvf"
     replace: "- arrange VF 24-2/30-2? NT"
