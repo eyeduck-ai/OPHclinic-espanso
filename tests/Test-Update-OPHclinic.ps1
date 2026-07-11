@@ -198,6 +198,10 @@ try {
     Assert-True ($cmdText.Contains('-PortableRoot "%~dp0."')) "CMD updater passes a root path with a trailing backslash"
     Pass-Test "CMD updater portable-root quoting"
 
+    $updaterText = Get-Content -LiteralPath $sourceUpdater -Raw -Encoding UTF8
+    Assert-True (-not $updaterText.Contains("Get-FileHash")) "Updater depends on the Get-FileHash cmdlet"
+    Pass-Test "updater portable SHA-256 implementation"
+
     $validMetadata = New-ReleaseFixture -Name "valid-release"
     $releaseMatchHash = Get-TestHash -Path $sourceMatch
     $releaseDefaultHash = Get-TestHash -Path $sourceDefault

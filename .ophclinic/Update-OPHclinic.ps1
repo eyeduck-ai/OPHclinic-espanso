@@ -10,7 +10,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$script:UpdaterVersion = [Version]"0.3.2"
+$script:UpdaterVersion = [Version]"0.3.3"
 $script:StateDirectory = $null
 $script:LogPath = $null
 $script:EspansoCommand = $null
@@ -49,7 +49,18 @@ function Write-UpdateLog {
 
 function Get-FileSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $bytes = $algorithm.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($bytes)).Replace("-", "").ToLowerInvariant()
+    } finally {
+        if ($stream) {
+            $stream.Dispose()
+        }
+        $algorithm.Dispose()
+    }
 }
 
 function Copy-ReleaseAsset {
